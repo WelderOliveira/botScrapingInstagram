@@ -1,0 +1,2 @@
+usuario:user
+senha:password
