@@ -12,6 +12,7 @@ selectors = {
     'name': 'header h1',
     'num_posts': 'header ul li:nth-child(1) span span',
     'num_followers': 'header ul li:nth-child(2) span',
+    'num_followersError': 'header ul li:nth-child(2) span span',
     'num_following': 'header ul li:nth-child(3) span',
     'verificado': '//*[@id="react-root"]/section/main/div/header/section/div[1]/div[1]/span',
     'following': 'header ul li:nth-child(3) a',
@@ -33,11 +34,13 @@ class instagramInfo:
         # chrome_options = webdriver.ChromeOptions()
         # chrome_options.add_argument("--headless")
         # self.driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
+        self.limit = int(input("Digite a Quantidade Mínima que deseja de Seguidores: "))
         self.driver = webdriver.Chrome(ChromeDriverManager().install())
         # self.driver.set_window_position(-10000, 0)
         self.driver.delete_all_cookies()
-        self.limit = int(input("Digite a Quantidade Mínima que deseja de Seguidores: "))
-        self.usernames = ['hobbydasorte', 'pecararaplanaltina', 'virginia', 'anitta']
+        with open('nomes.txt', 'r') as contas:
+            self.usernames = contas.readlines()
+            print(self.usernames)
 
     def login(self):
 
@@ -67,11 +70,11 @@ class instagramInfo:
         time.sleep(3)
         self.capturarDados()
 
-    def buscarDados(self, user):
+    def buscarDados(self):
 
         time.sleep(5)
-        self.driver.get(f'https://instagram.com/{user}')
-        print(f'Capturando dados do perfil - {user}')
+        self.driver.get(f'https://instagram.com/{self.user}')
+        print(f'Capturando dados do perfil - {self.user}')
 
         # PEGAR SE O PERFIL É VERIFICADO OU NÃO
         try:
@@ -91,45 +94,57 @@ class instagramInfo:
         try:
             self.num_posts = self.driver.find_element_by_css_selector(selectors['num_posts']).text.replace(',', '')
         except:
-            self.num_posts = 'NOT FOUND'
+            self.num_posts = 0
         # print(self.num_posts)
 
         #     PEGAR NÚMERO DE SEGUIDORES
         try:
-            self.num_followers = self.driver.find_element_by_css_selector(selectors['num_followers']).get_attribute(
-                'title').replace('.', '')
+            self.num_followers = int(
+                self.driver.find_element_by_css_selector(selectors['num_followers']).get_attribute('title').replace('.',
+                                                                                                                    ''))
         except:
-            self.num_followers = 'NOT FOUND'
-        # print(num_followers)
+            self.num_followers = int(
+                self.driver.find_element_by_css_selector(selectors['num_followersError']).get_attribute(
+                    'title').replace('.', ''))
+
+        print(self.num_followers)
 
         #     PEGAR NÚMERO DE SEGUIDOS
         try:
-
             self.num_following = self.driver.find_element_by_css_selector(selectors['num_following']).text.replace(
                 ',', '')
         except:
-            self.num_following = 'NOT FOUND'
+            self.num_following = 0
 
         # PROCURAR NÚMERO DE TELEFONE
         insta = self.driver.find_element_by_xpath('//*[@id="react-root"]/section/main/div/header/section').text
         try:
             self.phones = re.findall(r'\(?\d{2}\)?-? *\d{4}-? *-?\d{4}\b', insta)
         except:
-            self.phones = ''
+            self.phones = 0
 
         # PROCURAR E-MAIL
         try:
             self.email = re.findall(r'[\w\.-]+@[\w\.-]+', insta)
         except:
-            self.email = ''
+            self.email = 0
 
     def capturarSeguidos(self):
-        time.sleep(5)
-        self.driver.find_element_by_css_selector(selectors['following']).click()
-
+        time.sleep(2)
+        try:
+            self.driver.find_element_by_css_selector(selectors['following']).click()
+        except:
+            print('...Não foi possivel capturar os Seguidores dessa conta...')
+            self.names = []
+            return
         time.sleep(2)
 
         scroll_box = self.driver.find_element_by_xpath("/html/body/div[6]/div/div/div[3]")
+
+        while len(scroll_box.find_elements_by_tag_name('a')) < 1:
+            print("...Aguardando carregar a Lista de Seguidos...")
+            time.sleep(1)
+
         prev_height, height = 0, 1
 
         while prev_height != height:
@@ -141,13 +156,14 @@ class instagramInfo:
                         """, scroll_box)
         links = scroll_box.find_elements_by_tag_name('a')
         self.names = [name.text for name in links if name.text != '']
-        print(f'TO TENTANDO {self.names}')
+        print(f'Pegando os Seguidos...')
         # self.infoSeguidos()
         self.gerarDataFrameSeguindos()
 
     def infoSeguidos(self):
-        for nome in self.names:
-            self.buscarDados(nome)
+        for self.user in self.names:
+            self.buscarDados()
+            print(self.num_followers)
 
             if int(self.num_followers) > self.limit:
                 self.capturarSeguidos()
@@ -163,25 +179,23 @@ class instagramInfo:
                              'Verificado': self.status,
                              'Telefone': self.phones,
                              'Email': self.email}
-        # print(informacoesPerfil)
+
         dat1 = pd.DataFrame.from_dict(informacoesPerfil, orient='index').transpose()
         # columns = ['Nome', 'Qnt Posts', 'Qnt Seguidores', 'Qnt Seguindo', 'Situacao', 'Telefone','Email']
-        print(f'DICIONARIO {dat1}')
+        print(f'DADOS {dat1}')
         # CRIAÇÃO DE DATAFRAME DOS SEGUINDOS
+
         d = {'Seguidos': self.names}
-        # print(f'TOO TEEENTADDOOO2 {d}')
-        # dat2 = pd.DataFrame(d)
-        # print(f'FODA SE {dat2}')
         if self.dat2.empty:
-            # print("Entrei no IF")
-            # JUNÇÃO DE INFORMAÇÕES DE DATAFRAMES
             dat = dat1
+            loc = 'minimo/'
         else:
-            print(len(self.dat2.columns))
+            # JUNÇÃO DE INFORMAÇÕES DE DATAFRAMES
             dat = pd.concat([pd.DataFrame({})] + [self.dat2, dat1], axis=1)
             self.dat2 = self.dat2.iloc[0:0]
+            loc = 'maximo/'
 
-        return dat.to_csv(f'{self.name_el}.csv')
+        return dat.to_csv(f'{loc}{self.user}.csv')
 
     def gerarDataFrameSeguindos(self):
         # CRIAÇÃO DE DATAFRAME DOS SEGUINDOS
@@ -191,8 +205,9 @@ class instagramInfo:
 
     # CAPTURA DADOS DO ARQUIVO DE ENTRADA TXT
     def capturarDados(self):
-        for self.username in self.usernames:
-            self.buscarDados(self.username)
+        for self.user in self.usernames:
+            self.user = self.user.replace('\n', '')
+            self.buscarDados()
             print('Capturando Seguidores...')
             self.capturarSeguidos()
             self.geraInfoPerfil()
